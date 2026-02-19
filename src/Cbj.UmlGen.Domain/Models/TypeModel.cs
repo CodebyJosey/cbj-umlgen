@@ -10,6 +10,7 @@ namespace Cbj.UmlGen.Domain.Models;
 /// <param name="BaseTypeFullName">Base type full name if applicable.</param>
 /// <param name="InterfaceFullNames">Implemented interface full names.</param>
 /// <param name="MemberTypeRefs">Referenced types from members.</param>
+/// <param name="Dependencies">Dependencies from a class.</param>
 public sealed record TypeModel(
     string Name,
     string Namespace,
@@ -17,5 +18,6 @@ public sealed record TypeModel(
     string FullName,
     string? BaseTypeFullName,
     IReadOnlyList<string> InterfaceFullNames,
-    IReadOnlyList<MemberTypeRef> MemberTypeRefs
+    IReadOnlyList<MemberTypeRef> MemberTypeRefs,
+    IReadOnlyList<DependencyRef> Dependencies
 );
