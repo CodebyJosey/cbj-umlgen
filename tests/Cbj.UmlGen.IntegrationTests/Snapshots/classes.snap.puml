@@ -1,0 +1,44 @@
+@startuml classes
+hide empty members
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+skinparam package {
+  BorderColor #888888
+  BackgroundColor #FFFFFF
+}
+
+package "ExampleApp.Application" <<Application>> {
+  class "GetCustomerUseCase" as T34128DC8628641D9
+  interface "ICustomerRepository" as T4C10818EAA75464D
+}
+
+package "ExampleApp.Domain" <<Domain>> {
+  class "Customer" as TCD1B9A5AE79E87B5
+  interface "IClock" as T89A089BA74F345A3
+}
+
+package "ExampleApp.Infrastructure" <<Infrastructure>> {
+  class "InMemoryCustomerRepository" as TD45C73C9B286E5E3
+  class "SystemClock" as T47C30E6693574A87
+}
+
+legend left
+|= Layer |= Meaning |
+|<<Domain>>|Domain model|
+|<<Application>>|Use-cases + abstractions|
+|<<Infrastructure>>|IO/Roslyn/Adapters|
+|<<Cli>>|CLI host|
+|<<Tests>>|Test projects|
+endlegend
+
+TD45C73C9B286E5E3 ..|> T4C10818EAA75464D
+
+T34128DC8628641D9 ..> T4C10818EAA75464D : repo
+T34128DC8628641D9 ..> T89A089BA74F345A3 : clock
+
+T34128DC8628641D9 --> T4C10818EAA75464D : _repo
+T34128DC8628641D9 --> T89A089BA74F345A3 : _clock
+
+@enduml

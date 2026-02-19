@@ -20,6 +20,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Cbj.UmlGen.Cli\Cbj.UmlGen.Cli.csproj" />
+    <ProjectReference Include="..\..\src\Cbj.UmlGen.Infrastructure\Cbj.UmlGen.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Cbj.UmlGen.PlantUml\Cbj.UmlGen.PlantUml.csproj" />
+    <ProjectReference Include="..\..\src\Cbj.UmlGen.Application\Cbj.UmlGen.Application.csproj" />
   </ItemGroup>
 
 </Project>

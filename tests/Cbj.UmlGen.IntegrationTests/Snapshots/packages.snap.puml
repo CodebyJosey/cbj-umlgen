@@ -1,0 +1,9 @@
+@startuml packages
+hide empty members
+skinparam packageStyle rectangle
+
+package "ExampleApp.Application" { }
+package "ExampleApp.Domain" { }
+package "ExampleApp.Infrastructure" { }
+
+@enduml
