@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using Cbj.UmlGen.Application.Abstractions;
 using Cbj.UmlGen.Application.Options;
@@ -6,7 +7,7 @@ using Cbj.UmlGen.Domain.Models;
 namespace Cbj.UmlGen.PlantUml.Emitters;
 
 /// <summary>
-/// Emits a basic class diagram with inheritance and interface implementation.
+/// Emits a basic class diagram (types + inheritance + interfaces + simple member associations).
 /// </summary>
 public sealed class ClassDiagramEmitter : IUmlEmitter
 {
@@ -21,22 +22,20 @@ public sealed class ClassDiagramEmitter : IUmlEmitter
             .Where(t => Filter(t.Namespace, options))
             .ToList();
 
-        Dictionary<string, TypeModel>? byFullname = allTypes.ToDictionary(t => t.FullName, t => t);
+        Dictionary<string, TypeModel>? byFullName = allTypes.ToDictionary(t => t.FullName, t => t);
 
         StringBuilder? sb = new StringBuilder();
-        sb.AppendLine("@startuml");
+        sb.AppendLine($"@startuml {Name}");
         sb.AppendLine("hide empty members");
         sb.AppendLine();
 
         // Declare types
-        foreach (TypeModel? t in allTypes.OrderBy(t => t.FullName))
+        foreach (var t in allTypes.OrderBy(t => t.FullName))
         {
             string? keyword = t.Kind switch
             {
                 TypeKind.Interface => "interface",
                 TypeKind.Enum => "enum",
-                TypeKind.Struct => "class",
-                TypeKind.Record => "class",
                 _ => "class"
             };
 
@@ -45,24 +44,37 @@ public sealed class ClassDiagramEmitter : IUmlEmitter
 
         sb.AppendLine();
 
-        // Inheritance + interfaces
+        // Relations
         foreach (TypeModel? t in allTypes)
         {
+            // Inheritance
             if (!string.IsNullOrWhiteSpace(t.BaseTypeFullName))
             {
                 string? baseName = NormalizeFullQualified(t.BaseTypeFullName);
-                if (byFullname.ContainsKey(baseName))
+                if (byFullName.ContainsKey(baseName))
                 {
                     sb.AppendLine($"{Alias(t.FullName)} --|> {Alias(baseName)}");
                 }
             }
 
+            // Implements
             foreach (string? ifaceFq in t.InterfaceFullNames)
             {
                 string? iface = NormalizeFullQualified(ifaceFq);
-                if (byFullname.ContainsKey(iface))
+                if (byFullName.ContainsKey(iface))
                 {
                     sb.AppendLine($"{Alias(t.FullName)} ..|> {Alias(iface)}");
+                }
+            }
+
+            // Simple member associations (fields/properties)
+            foreach (MemberTypeRef? m in t.MemberTypeRefs)
+            {
+                string? target = NormalizeFullQualified(m.TargetTypeFullName);
+
+                if (byFullName.ContainsKey(target) && !string.Equals(target, t.FullName, StringComparison.Ordinal))
+                {
+                    sb.AppendLine($"{Alias(t.FullName)} --> {Alias(target)} : {Escape(m.MemberName)}");
                 }
             }
         }
@@ -79,8 +91,13 @@ public sealed class ClassDiagramEmitter : IUmlEmitter
     private static string NormalizeFullQualified(string fq)
         => fq.StartsWith("global::", StringComparison.Ordinal) ? fq["global::".Length..] : fq;
 
+    // Stable + collision resistant alias
     private static string Alias(string fullName)
-        => "T" + Math.Abs(fullName.GetHashCode()).ToString();
+    {
+        byte[]? bytes = SHA256.HashData(Encoding.UTF8.GetBytes(fullName));
+        string? hex = Convert.ToHexString(bytes.AsSpan(0, 8)); // 16 chars
+        return "T" + hex;
+    }
 
     private static bool Filter(string ns, UmlEmitOptions options)
     {

@@ -25,7 +25,7 @@ public sealed class PackageDiagramEmitter : IUmlEmitter
             .ToList();
 
         StringBuilder? sb = new StringBuilder();
-        sb.AppendLine("@startuml");
+        sb.AppendLine($"@startuml {Name}");
         sb.AppendLine("hide empty members");
         sb.AppendLine("skinparam packageStyle rectangle");
         sb.AppendLine();
