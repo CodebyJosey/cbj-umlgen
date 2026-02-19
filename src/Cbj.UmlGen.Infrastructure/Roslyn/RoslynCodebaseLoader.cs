@@ -1,0 +1,134 @@
+using Cbj.UmlGen.Application.Abstractions;
+using Cbj.UmlGen.Domain.Models;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.MSBuild;
+
+namespace Cbj.UmlGen.Infrastructure.Roslyn;
+
+/// <summary>
+/// Loads C# solutions/projects using Roslyn and builds a <see cref="Codebase"/> model.
+/// </summary>
+public sealed class RoslynCodebaseLoader : ICodebaseLoader
+{
+    /// <inheritdoc />
+    public async Task<Codebase> LoadAsync(string sourcePath, CancellationToken ct = default)
+    {
+        string entry = ResolveEntryPoint(sourcePath);
+
+        using MSBuildWorkspace? workspace = MSBuildWorkspace.Create();
+        Solution? solution = entry.EndsWith(".sln", StringComparison.OrdinalIgnoreCase)
+            ? await workspace.OpenSolutionAsync(entry, cancellationToken: ct)
+            : (await workspace.OpenProjectAsync(entry, cancellationToken: ct)).Solution;
+
+        List<ProjectModel> projects = new List<ProjectModel>();
+
+        foreach (Project? project in solution.Projects)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            Compilation? compilation = await project.GetCompilationAsync(ct);
+            if (compilation is null) continue;
+
+            List<TypeModel>? types = new List<TypeModel>();
+
+            foreach (SyntaxTree? tree in compilation.SyntaxTrees)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                SemanticModel? semanticModel = compilation.GetSemanticModel(tree);
+                SyntaxNode? root = await tree.GetRootAsync(ct);
+
+                foreach (INamedTypeSymbol? declaredSymbol in root.DescendantNodes()
+                            .Select(n => semanticModel.GetDeclaredSymbol(n))
+                            .OfType<INamedTypeSymbol>())
+                {
+                    if (declaredSymbol is null) continue;
+                    if (declaredSymbol.Locations.All(l => !l.IsInSource)) continue;
+
+                    string? ns = declaredSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+                    string? name = declaredSymbol.Name;
+                    string? fullName = string.IsNullOrWhiteSpace(ns) ? name : $"{ns}.{name}";
+
+                    Domain.Models.TypeKind kind = MapKind(declaredSymbol);
+
+                    string? baseType = declaredSymbol.BaseType is { SpecialType: not SpecialType.System_Object }
+                        ? declaredSymbol.BaseType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                        : null;
+
+                    List<string>? interfaces = declaredSymbol.AllInterfaces
+                                .Select(i => i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+                                .Distinct()
+                                .ToList();
+
+                    List<MemberTypeRef>? memberRefs = new List<MemberTypeRef>();
+
+                    foreach (ISymbol? member in declaredSymbol.GetMembers())
+                    {
+                        if (member is IFieldSymbol field && field.Type is INamedTypeSymbol fType)
+                        {
+                            memberRefs.Add(new MemberTypeRef(field.Name,
+                                fType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+                        }
+
+                        if (member is IPropertySymbol prop && prop.Type is INamedTypeSymbol pType)
+                        {
+                            memberRefs.Add(new MemberTypeRef(prop.Name,
+                                pType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+                        }
+                    }
+
+                    types.Add(new TypeModel(
+                        Name: name,
+                        Namespace: ns,
+                        Kind: kind,
+                        FullName: fullName,
+                        BaseTypeFullName: baseType,
+                        InterfaceFullNames: interfaces,
+                        MemberTypeRefs: memberRefs
+                    ));
+                }
+            }
+
+            List<TypeModel>? unique = types
+                .GroupBy(t => t.FullName)
+                .Select(g => g.First())
+                .ToList();
+
+            projects.Add(new ProjectModel(project.Name, unique));
+        }
+
+        return new Codebase(projects);
+    }
+
+    private static string ResolveEntryPoint(string source)
+    {
+        if (File.Exists(source) && (source.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
+                                   source.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)))
+        {
+            return Path.GetFullPath(source);
+        }
+
+        string? dir = Directory.Exists(source) ? source : Path.GetDirectoryName(source);
+        if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+        {
+            throw new ArgumentException($"Source path not found: {source}");
+        }
+
+        string? sln = Directory.GetFiles(dir, "*.sln").FirstOrDefault();
+        if (sln is not null) return Path.GetFullPath(sln);
+
+        string? csproj = Directory.GetFiles(dir, "*.csproj").FirstOrDefault();
+        if (csproj is not null) return Path.GetFullPath(csproj);
+
+        throw new ArgumentException("No .sln or .csproj found in the provided directory.");
+    }
+
+    private static Domain.Models.TypeKind MapKind(INamedTypeSymbol symbol)
+    {
+        if (symbol.TypeKind == Microsoft.CodeAnalysis.TypeKind.Interface) return Domain.Models.TypeKind.Interface;
+        if (symbol.TypeKind == Microsoft.CodeAnalysis.TypeKind.Enum) return Domain.Models.TypeKind.Enum;
+        if (symbol.TypeKind == Microsoft.CodeAnalysis.TypeKind.Struct) return Domain.Models.TypeKind.Struct;
+
+        return symbol.IsRecord ? Domain.Models.TypeKind.Record : Domain.Models.TypeKind.Class;
+    }
+}
