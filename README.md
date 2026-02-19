@@ -51,7 +51,7 @@ Running the tool generates:
 Clone the repository:
 
 ``` bash
-git clone https://github.com/<your-username>/cbj-umlgen.git
+git clone https://github.com/CodeByJosey/cbj-umlgen.git
 cd cbj-umlgen
 ```
 
