@@ -78,7 +78,8 @@ public static class GenerateCommand
                 IUmlEmitter[] emitters = new IUmlEmitter[]
                 {
                     new PackageDiagramEmitter(),
-                    new ClassDiagramEmitter()
+                    new ClassDiagramEmitter(),
+                    new LayerDiagramEmitter()
                 };
 
                 GenerateDiagramsUseCase? useCase = new GenerateDiagramsUseCase(loader, emitters, writer);
